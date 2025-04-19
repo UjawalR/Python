@@ -1,0 +1,39 @@
+import socket
+import struct
+from binascii import hexlify
+
+def packet_sniffer():
+    try:
+        raw_socket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(3))
+    except socket.error as e:
+        print(f"Socket creation failed: {e}")
+        sys.exit(1)
+
+    print("Sniffing packets...")
+    while True:
+        raw_packet, addr = raw_socket.recvfrom(65535)
+        ethernet_header = raw_packet[:14]
+        eth_unpack = struct.unpack("!6s6sH", ethernet_header)
+        dest_mac = hexlify(eth_unpack[0]).decode('utf-8')
+        src_mac = hexlify(eth_unpack[1]).decode('utf-8')
+        protocol = eth_unpack[2]
+
+        print(f"Ethernet Header: Dest MAC: {dest_mac}, Src MAC: {src_mac}, Protocol: {protocol}")
+
+        # You can add more detailed parsing for IP, TCP, UDP headers here
+        if protocol == 8: # IP (0x0800)
+            ip_header = raw_packet[14:34]
+            ip_unpack = struct.unpack("!BBHHHBBH4s4s", ip_header)
+            version_ihl = ip_unpack[0]
+            version = version_ihl >> 4
+            ihl = version_ihl & 0xF
+            ttl = ip_unpack[5]
+            protocol_ip = ip_unpack[6]
+            src_ip = socket.inet_ntoa(ip_unpack[8])
+            dest_ip = socket.inet_ntoa(ip_unpack[9])
+            print(f"  IP Header: Version: {version}, IHL: {ihl}, TTL: {ttl}, Protocol: {protocol_ip}, Src IP: {src_ip}, Dest IP: {dest_ip}")
+
+        # Add parsing for TCP (protocol_ip == 6) or UDP (protocol_ip == 17) as needed
+
+if __name__ == "__main__":
+    packet_sniffer()
