@@ -1,0 +1,39 @@
+import socket
+import sys
+
+def port_scan(target_host, port_list):
+    try:
+        target_ip = socket.gethostbyname(target_host)
+    except socket.gaierror:
+        print(f"Error: Could not resolve hostname {target_host}")
+        return
+
+    print(f"Scanning ports on {target_ip}...")
+
+    for port in port_list:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((target_ip, port))
+        if result == 0:
+            try:
+                service_name = socket.getservbyport(port, 'tcp')
+            except socket.error:
+                service_name = "Unknown"
+            print(f"Port {port}: Open - {service_name}")
+        sock.close()
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("Usage: python port_scanner.py <target_host> <port_range>")
+        print("Example: python port_scanner.py scanme.nmap.org 1-100")
+        sys.exit(1)
+
+    target = sys.argv[1]
+    ports = sys.argv[2].split('-')
+    if len(ports) == 2 and ports[0].isdigit() and ports[1].isdigit():
+        start_port = int(ports[0])
+        end_port = int(ports[1])
+        port_range = range(start_port, end_port + 1)
+        port_scan(target, list(port_range))
+    else:
+        print("Invalid port range format. Use 'start-end'.")
