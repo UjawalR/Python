@@ -1,0 +1,19 @@
+import hashlib
+
+def hash_file(file_path, algorithm="sha256"):
+    try:
+        hasher = hashlib.new(algorithm)
+        with open(file_path, 'rb') as file:
+            while chunk := file.read(4096):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+    except FileNotFoundError:
+        return f"Error: File not found at {file_path}"
+    except ValueError:
+        return f"Error: Unsupported hashing algorithm: {algorithm}"
+
+if __name__ == "__main__":
+    file_to_hash = input("Enter the path to the file: ")
+    hash_algorithm = input("Enter the hashing algorithm (e.g., sha256, md5): ").lower()
+    file_hash = hash_file(file_to_hash, hash_algorithm)
+    print(f"The {hash_algorithm} hash of {file_to_hash} is: {file_hash}")
