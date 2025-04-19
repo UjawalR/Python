@@ -1,0 +1,218 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+
+# --- 1. Data Generation (Simulating Banking Data) ---
+np.random.seed(42)
+num_customers = 1000
+transaction_count = 5000
+
+customer_ids = np.arange(1, num_customers + 1)
+account_types = np.random.choice(['Savings', 'Checking', 'Investment'], num_customers)
+balances = np.random.uniform(100, 100000, num_customers)
+signup_dates = pd.to_datetime('2020-01-01') + pd.to_timedelta(np.random.randint(0, 1826, num_customers), unit='D')  # Up to 5 years
+
+customers_df = pd.DataFrame({
+    'customer_id': customer_ids,
+    'account_type': account_types,
+    'balance': balances,
+    'signup_date': signup_dates
+})
+
+transaction_ids = np.arange(1, transaction_count + 1)
+transaction_types = np.random.choice(['Deposit', 'Withdrawal', 'Transfer_In', 'Transfer_Out', 'Payment'], transaction_count)
+amounts = np.random.uniform(10, 5000)
+transaction_dates = pd.to_datetime('2020-01-05') + pd.to_timedelta(np.random.randint(0, 1821, transaction_count), unit='D') # Slightly after signup
+customer_indices = np.random.randint(1, num_customers + 1, transaction_count)
+
+transactions_df = pd.DataFrame({
+    'transaction_id': transaction_ids,
+    'customer_id': customer_indices,
+    'transaction_type': transaction_types,
+    'amount': amounts,
+    'transaction_date': transaction_dates
+})
+
+# --- 2. Data Cleaning and Preprocessing ---
+
+# Convert dates to datetime objects (already done during generation)
+
+# Ensure amounts are positive
+transactions_df['amount'] = np.abs(transactions_df['amount'])
+
+# Create a 'transaction_month' column for time-based analysis
+transactions_df['transaction_month'] = transactions_df['transaction_date'].dt.to_period('M')
+customers_df['signup_month'] = customers_df['signup_date'].dt.to_period('M')
+
+# --- 3. Exploratory Data Analysis (EDA) ---
+
+# --- 3.1 Customer Analysis ---
+print("\n--- Customer Data Overview ---")
+print(customers_df.head())
+print(customers_df.info())
+print(customers_df.describe())
+print("\nAccount Type Distribution:")
+print(customers_df['account_type'].value_counts())
+
+plt.figure(figsize=(8, 6))
+sns.countplot(data=customers_df, x='account_type')
+plt.title('Distribution of Account Types')
+plt.xlabel('Account Type')
+plt.ylabel('Number of Customers')
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.histplot(customers_df['balance'], bins=30, kde=True)
+plt.title('Distribution of Account Balances')
+plt.xlabel('Balance')
+plt.ylabel('Number of Customers')
+plt.show()
+
+# --- 3.2 Transaction Analysis ---
+print("\n--- Transaction Data Overview ---")
+print(transactions_df.head())
+print(transactions_df.info())
+print(transactions_df.describe())
+print("\nTransaction Type Distribution:")
+print(transactions_df['transaction_type'].value_counts())
+
+plt.figure(figsize=(10, 6))
+sns.countplot(data=transactions_df, x='transaction_type')
+plt.title('Distribution of Transaction Types')
+plt.xlabel('Transaction Type')
+plt.ylabel('Number of Transactions')
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.histplot(transactions_df['amount'], bins=30, kde=True)
+plt.title('Distribution of Transaction Amounts')
+plt.xlabel('Amount')
+plt.ylabel('Number of Transactions')
+plt.show()
+
+# --- 3.3 Time-Based Analysis ---
+monthly_transactions = transactions_df.groupby('transaction_month').size()
+plt.figure(figsize=(12, 6))
+monthly_transactions.plot(kind='line', marker='o')
+plt.title('Monthly Transaction Volume')
+plt.xlabel('Month')
+plt.ylabel('Number of Transactions')
+plt.grid(True)
+plt.show()
+
+monthly_deposits = transactions_df[transactions_df['transaction_type'] == 'Deposit'].groupby('transaction_month')['amount'].sum()
+monthly_withdrawals = transactions_df[transactions_df['transaction_type'] == 'Withdrawal'].groupby('transaction_month')['amount'].sum()
+
+plt.figure(figsize=(12, 6))
+plt.plot(monthly_deposits.index.astype(str), monthly_deposits.values, label='Total Deposits', marker='o')
+plt.plot(monthly_withdrawals.index.astype(str), monthly_withdrawals.values, label='Total Withdrawals', marker='o')
+plt.title('Monthly Deposits vs. Withdrawals')
+plt.xlabel('Month')
+plt.ylabel('Amount')
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+# --- 4. Merging DataFrames for Combined Analysis ---
+merged_df = pd.merge(transactions_df, customers_df, on='customer_id', how='inner')
+print("\n--- Merged Data Overview ---")
+print(merged_df.head())
+
+# --- 5. Deeper Analysis and Insights ---
+
+# --- 5.1 Account Type and Transaction Behavior ---
+account_transaction_counts = merged_df.groupby(['account_type', 'transaction_type']).size().unstack(fill_value=0)
+print("\nTransaction Counts by Account Type:")
+print(account_transaction_counts)
+account_transaction_counts.plot(kind='bar', stacked=True, figsize=(10, 6))
+plt.title('Transaction Type Distribution by Account Type')
+plt.xlabel('Account Type')
+plt.ylabel('Number of Transactions')
+plt.xticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+account_transaction_amounts = merged_df.groupby(['account_type', 'transaction_type'])['amount'].mean().unstack(fill_value=0)
+print("\nAverage Transaction Amount by Account Type:")
+print(account_transaction_amounts)
+account_transaction_amounts.plot(kind='bar', figsize=(10, 6))
+plt.title('Average Transaction Amount by Account Type')
+plt.xlabel('Account Type')
+plt.ylabel('Average Transaction Amount')
+plt.xticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+# --- 5.2 Customer Segmentation (Basic based on balance) ---
+balance_bins = [0, 10000, 50000, 100000, float('inf')]
+balance_labels = ['Low Balance', 'Medium Balance', 'High Balance', 'Very High Balance']
+customers_df['balance_segment'] = pd.cut(customers_df['balance'], bins=balance_bins, labels=balance_labels, right=False)
+print("\nCustomer Segmentation by Balance:")
+print(customers_df['balance_segment'].value_counts().sort_index())
+
+plt.figure(figsize=(8, 6))
+sns.countplot(data=customers_df, x='balance_segment', order=balance_labels)
+plt.title('Customer Segmentation by Balance')
+plt.xlabel('Balance Segment')
+plt.ylabel('Number of Customers')
+plt.show()
+
+# Analyze transaction behavior per balance segment
+segmented_transactions = pd.merge(transactions_df, customers_df[['customer_id', 'balance_segment']], on='customer_id', how='inner')
+segment_transaction_counts = segmented_transactions.groupby(['balance_segment', 'transaction_type']).size().unstack(fill_value=0)
+print("\nTransaction Counts by Balance Segment:")
+print(segment_transaction_counts)
+segment_transaction_counts.plot(kind='bar', stacked=True, figsize=(10, 6))
+plt.title('Transaction Type Distribution by Balance Segment')
+plt.xlabel('Balance Segment')
+plt.ylabel('Number of Transactions')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+
+# --- 5.3 Time Since Signup and Balance ---
+today = datetime.now()
+customers_df['days_since_signup'] = (today - customers_df['signup_date']).dt.days
+
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=customers_df, x='days_since_signup', y='balance', hue='account_type')
+plt.title('Balance vs. Days Since Signup')
+plt.xlabel('Days Since Signup')
+plt.ylabel('Balance')
+plt.legend(title='Account Type')
+plt.grid(True)
+plt.show()
+
+# --- 6. Further Analysis Ideas (Expand on these) ---
+
+# 6.1 Customer Lifetime Value (CLTV) Estimation:
+#    - Calculate the average transaction value and frequency for each customer.
+#    - Estimate CLTV based on these metrics and the duration of their relationship with the bank.
+
+# 6.2 Churn Analysis (if you had data on account closure):
+#    - Identify factors that might contribute to customer churn.
+#    - Analyze the behavior of customers who closed their accounts compared to active customers.
+
+# 6.3 Transaction Pattern Analysis:
+#    - Look for seasonality or daily/weekly patterns in transaction volumes.
+#    - Analyze sequences of transactions for individual customers.
+
+# 6.4 Feature Engineering:
+#    - Create new features like the number of transactions per month, average deposit/withdrawal amount, etc.
+#    - Use these features for more advanced analysis or modeling.
+
+# 6.5 Correlation Analysis:
+#    - Explore correlations between different numerical features (e.g., balance and transaction amount).
+
+# --- 7. Conclusion and Reporting ---
+
+print("\n--- Conclusion ---")
+print("This analysis provides initial insights into customer behavior, transaction patterns, and account characteristics.")
+print("Further investigation can focus on customer segmentation, risk assessment, and personalized service offerings.")
+print("The visualizations help in understanding the data distributions and relationships between different variables.")
+
+# You would typically save your findings and visualizations in a report or presentation.
