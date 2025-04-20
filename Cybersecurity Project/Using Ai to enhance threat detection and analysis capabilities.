@@ -1,0 +1,241 @@
+import socket
+import struct
+import sys
+import time
+import random
+import hashlib
+import json
+from datetime import datetime
+from collections import deque
+import threading
+from queue import Queue
+
+# AI/ML Libraries (Conceptual - Replace with actual implementations)
+# from sklearn.model_selection import train_test_split
+# from sklearn.linear_model import LogisticRegression
+# from tensorflow import keras
+# from tensorflow.keras.layers import Input, Dense
+# import numpy as np
+
+# --- Configuration ---
+TARGET_HOST = "localhost"  # Replace with your target
+COMMON_PORTS = [21, 22, 23, 25, 80, 110, 111, 135, 139, 443, 445, 1433, 3306, 8080]
+WORDLIST_PATH = "common_passwords.txt"  # Replace with a real wordlist
+LOG_FILE = "security_log.txt"
+ANOMALY_THRESHOLD = 0.8  # Threshold for AI-flagged anomalies
+MAX_PACKET_HISTORY = 100
+SCAN_SPEED_DELAY = 0.1  # Delay between port scans
+
+# --- Global Data Structures ---
+packet_history = deque(maxlen=MAX_PACKET_HISTORY)
+scan_results = {}
+potential_anomalies = Queue()
+
+# --- Utility Functions ---
+def log_activity(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] {message}\n"
+    with open(LOG_FILE, "a") as f:
+        f.write(log_entry)
+    print(message)
+
+def generate_random_ipv4():
+    return ".".join(map(str, (random.randint(0, 255) for _ in range(4))))
+
+def calculate_entropy(data):
+    if not data:
+        return 0
+    entropy = 0
+    data_bytes = data.encode('utf-8')
+    frequency = {}
+    for byte in data_bytes:
+        frequency[byte] = frequency.get(byte, 0) + 1
+    for count in frequency.values():
+        probability = count / len(data_bytes)
+        entropy -= probability * np.log2(probability)
+    return entropy
+
+# --- Network Scanning Module ---
+def is_port_open(target_ip, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    result = sock.connect_ex((target_ip, port))
+    sock.close()
+    return result == 0
+
+def scan_ports(target_host, ports):
+    try:
+        target_ip = socket.gethostbyname(target_host)
+        log_activity(f"Starting port scan on {target_ip}")
+        scan_results[target_ip] = {}
+        for port in ports:
+            if is_port_open(target_ip, port):
+                try:
+                    service_name = socket.getservbyport(port, 'tcp')
+                except socket.error:
+                    service_name = "Unknown"
+                log_activity(f"Port {port}: Open - {service_name}")
+                scan_results[target_ip][port] = service_name
+            time.sleep(SCAN_SPEED_DELAY)
+        log_activity(f"Port scan on {target_ip} complete.")
+    except socket.gaierror:
+        log_activity(f"Error: Could not resolve hostname {target_host}")
+    except Exception as e:
+        log_activity(f"An error occurred during port scan: {e}")
+
+# --- Packet Sniffing Module (Basic) ---
+def packet_sniffer():
+    try:
+        raw_socket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(3))
+    except socket.error as e:
+        log_activity(f"Socket creation failed: {e}")
+        return
+
+    log_activity("Starting packet sniffing...")
+    while True:
+        try:
+            raw_packet, addr = raw_socket.recvfrom(65535)
+            packet_history.append(raw_packet)
+            # Basic analysis - looking for unusual packet sizes or protocols
+            packet_size = len(raw_packet)
+            # protocol = ... (more detailed parsing needed)
+
+            # Conceptual AI-based anomaly detection
+            anomaly_score = analyze_packet_anomaly(raw_packet)
+            if anomaly_score > ANOMALY_THRESHOLD:
+                potential_anomalies.put((datetime.now(), f"Potential network anomaly detected (score: {anomaly_score})"))
+
+        except socket.error as e:
+            log_activity(f"Error receiving packet: {e}")
+        except KeyboardInterrupt:
+            log_activity("Packet sniffing stopped.")
+            break
+        except Exception as e:
+            log_activity(f"An error occurred during packet sniffing: {e}")
+
+# --- Brute-Force Module (Conceptual - Requires more robust implementation) ---
+def attempt_brute_force(target_host, username_list_path, password_list_path, service="ssh"):
+    log_activity(f"Starting brute-force attack simulation on {target_host} ({service})")
+    # In a real scenario, you would use libraries like paramiko (for SSH), ftplib (for FTP), etc.
+    # This is a simplified example for demonstration purposes only.
+    try:
+        with open(username_list_path, 'r') as usernames, open(password_list_path, 'r') as passwords:
+            for user in usernames:
+                user = user.strip()
+                for password in passwords:
+                    password = password.strip()
+                    # Simulate connection attempt (replace with actual service interaction)
+                    simulated_success = random.random() < 0.001  # Low chance of success for demonstration
+                    log_activity(f"Attempting {service} login: User='{user}', Password='{password}' - Success: {simulated_success}")
+                    if simulated_success:
+                        log_activity(f"[SUCCESS] Found credentials for {target_host} ({service}): User='{user}', Password='{password}'")
+                        return True
+                    time.sleep(0.1) # Be mindful of rate limiting
+    except FileNotFoundError as e:
+        log_activity(f"Error: {e}")
+    except Exception as e:
+        log_activity(f"An error occurred during brute-force simulation: {e}")
+    return False
+
+# --- AI-Powered Anomaly Detection (Conceptual) ---
+# This is a placeholder. Real implementation would involve training ML models on network traffic data.
+def analyze_packet_anomaly(packet_data):
+    # Extract features from the packet (e.g., size, flags, protocols)
+    packet_size = len(packet_data)
+    # entropy = calculate_entropy(packet_data.hex()) # Example feature
+
+    # Simulate AI model predicting anomaly score
+    # In reality, you'd feed features to a trained ML model
+    if packet_size > 1500 or random.random() < 0.05: # Simple heuristic
+        return random.uniform(0.7, 0.95) # High anomaly score
+    else:
+        return random.uniform(0.1, 0.4) # Low anomaly score
+
+# --- AI-Powered Threat Intelligence Analysis (Conceptual) ---
+# This would involve querying threat intelligence feeds and correlating with local findings.
+def check_threat_intelligence(ip_address):
+    # Simulate querying a threat intelligence database
+    threat_data = {
+        "8.8.8.8": {"risk_score": 0.2, "category": "Benign"},
+        "192.168.1.100": {"risk_score": 0.6, "category": "Internal"},
+        generate_random_ipv4(): {"risk_score": 0.9, "category": "Malicious"}, # Example
+    }
+    if ip_address in threat_data:
+        return threat_data[ip_address]
+    return {"risk_score": 0.1, "category": "Unknown"}
+
+# --- Anomaly Reporting Thread ---
+def anomaly_reporter():
+    while True:
+        try:
+            timestamp, anomaly = potential_anomalies.get(timeout=5)
+            log_activity(f"[ANOMALY DETECTED at {timestamp}] {anomaly}")
+            # You could add more sophisticated reporting or alerting mechanisms here
+        except Queue.Empty:
+            pass
+        except Exception as e:
+            log_activity(f"Error in anomaly reporter thread: {e}")
+            time.sleep(5)
+
+# --- Main Execution ---
+if __name__ == "__main__":
+    log_activity("--- Cyber Security Project with AI ---")
+
+    # Start anomaly reporter thread
+    anomaly_thread = threading.Thread(target=anomaly_reporter)
+    anomaly_thread.daemon = True
+    anomaly_thread.start()
+
+    try:
+        while True:
+            print("\nChoose an action:")
+            print("1. Perform Port Scan")
+            print("2. Start Packet Sniffer (Requires elevated privileges)")
+            print("3. Simulate Brute-Force Attack (Educational)")
+            print("4. Check Threat Intelligence for IP")
+            print("5. Exit")
+
+            choice = input("Enter your choice: ")
+
+            if choice == '1':
+                target = input("Enter target host/IP for port scan: ")
+                ports_input = input("Enter port range (e.g., 1-100) or comma-separated list: ")
+                if '-' in ports_input:
+                    try:
+                        start, end = map(int, ports_input.split('-'))
+                        ports_to_scan = range(start, end + 1)
+                        threading.Thread(target=scan_ports, args=(target, list(ports_to_scan))).start()
+                    except ValueError:
+                        log_activity("Invalid port range format.")
+                else:
+                    try:
+                        ports_to_scan = [int(p.strip()) for p in ports_input.split(',')]
+                        threading.Thread(target=scan_ports, args=(target, ports_to_scan)).start()
+                    except ValueError:
+                        log_activity("Invalid port list format.")
+            elif choice == '2':
+                if sys.platform.startswith('linux'): # Raw sockets often require root
+                    threading.Thread(target=packet_sniffer).start()
+                else:
+                    log_activity("Packet sniffing requires elevated privileges (e.g., root on Linux).")
+            elif choice == '3':
+                target = input("Enter target host for brute-force simulation: ")
+                user_list = input(f"Enter path to username list ({WORDLIST_PATH}): ") or "usernames.txt"
+                pass_list = input(f"Enter path to password list ({WORDLIST_PATH}): ") or WORDLIST_PATH
+                service_type = input("Enter service type (e.g., ssh, ftp): ") or "ssh"
+                threading.Thread(target=attempt_brute_force, args=(target, user_list, pass_list, service_type)).start()
+            elif choice == '4':
+                ip_to_check = input("Enter IP address to check against threat intelligence: ")
+                threat_info = check_threat_intelligence(ip_to_check)
+                log_activity(f"Threat intelligence for {ip_to_check}: {threat_info}")
+            elif choice == '5':
+                log_activity("Exiting.")
+                break
+            else:
+                print("Invalid choice.")
+
+            time.sleep(0.1) # Small delay for user input
+    except KeyboardInterrupt:
+        log_activity("Program interrupted by user.")
+    except Exception as e:
+        log_activity(f"An unexpected error occurred in the main loop: {e}")
