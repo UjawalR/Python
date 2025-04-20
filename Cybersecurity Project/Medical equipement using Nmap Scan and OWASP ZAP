@@ -1,0 +1,300 @@
+import socket
+import sys
+import time
+import random
+import hashlib
+import json
+from datetime import datetime
+import threading
+from queue import Queue
+import subprocess
+import re
+from urllib.parse import urlparse
+import logging
+import os
+from cryptography.fernet import Fernet  # For symmetric encryption
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.backends import default_backend
+
+# --- Configuration for Piedmont Hospital Medical Product Security ---
+TARGET_DEVICE_IP = "192.168.1.100"  # Replace with actual Piedmont Hospital device IP
+SCAN_TIMEOUT = 5
+VULNERABILITY_THRESHOLD = 0.8  # Threshold for AI-flagged potential vulnerabilities
+LOG_FILE = "piedmont_security_log.txt"
+NMAP_PATH = "/usr/bin/nmap"  # Adjust path if necessary
+OWASP_ZAP_PATH = "/opt/OWASP/ZAP/zap.sh"  # Adjust path if necessary
+SECURE_COMMUNICATION_PORT = 12345  # Example port for secure communication
+AUTHENTICATION_KEY_FILE = "device_auth.key"  # File to store device authentication key
+ENCRYPTION_KEY_FILE = "data_encryption.key"  # File to store data encryption key
+TRUSTED_ADMIN_IPS = ["192.168.1.50"]  # List of trusted administrator IPs
+ANOMALY_DETECTION_MODEL = "network_anomaly_model.pkl" # Placeholder for AI model
+
+# --- Logging Setup ---
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+# --- Global Data Structures ---
+vulnerability_queue = Queue()
+scan_results = {}
+device_status = {"last_seen": None, "potential_compromise": False}
+network_traffic_history = [] # For basic anomaly detection
+
+# --- Utility Functions ---
+def log_activity(message, level=logging.INFO):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_message = f"[{timestamp}] {message}"
+    print(log_message)
+    logging.log(level, message)
+
+def run_command(command):
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+        return result.stdout, result.stderr
+    except subprocess.CalledProcessError as e:
+        return None, e.stderr
+    except FileNotFoundError as e:
+        log_activity(f"Error: {e}", logging.ERROR)
+        return None, str(e)
+
+def generate_secure_key(filename):
+    key = Fernet.generate_key()
+    with open(filename, "wb") as key_file:
+        key_file.write(key)
+    log_activity(f"Secure key generated and saved to {filename}")
+    return key
+
+def load_secure_key(filename):
+    try:
+        with open(filename, "rb") as key_file:
+            return key_file.read()
+    except FileNotFoundError:
+        log_activity(f"Error: Key file {filename} not found.", logging.ERROR)
+        return None
+
+# --- Secure Communication Channel (Simulation) ---
+def establish_secure_channel(target_ip, port):
+    log_activity(f"Attempting to establish secure channel with {target_ip}:{port}")
+    # In a real-world scenario, this would involve TLS/SSL handshake
+    # For this simulation, we'll just check if the port is open
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5)
+    result = sock.connect_ex((target_ip, port))
+    sock.close()
+    if result == 0:
+        log_activity(f"Secure channel established (simulated) on {target_ip}:{port}")
+        return True
+    else:
+        log_activity(f"Failed to establish secure channel with {target_ip}:{port}", logging.WARNING)
+        return False
+
+def encrypt_data(data, key):
+    f = Fernet(key)
+    encrypted_data = f.encrypt(data.encode())
+    return encrypted_data
+
+def decrypt_data(encrypted_data, key):
+    f = Fernet(key)
+    try:
+        decrypted_data = f.decrypt(encrypted_data).decode()
+        return decrypted_data
+    except Exception as e:
+        log_activity(f"Error decrypting data: {e}", logging.ERROR)
+        return None
+
+# --- Device Authentication Module (Simulation) ---
+def authenticate_device(device_ip, expected_key):
+    # In a real scenario, this would involve a secure key exchange or challenge-response
+    # For simulation, we'll just check if we have the expected key
+    if load_secure_key(AUTHENTICATION_KEY_FILE) == expected_key:
+        log_activity(f"Device {device_ip} authenticated successfully (simulated).")
+        return True
+    else:
+        log_activity(f"Device {device_ip} authentication failed (simulated).", logging.WARNING)
+        return False
+
+# --- Vulnerability Scanning Modules (Enhanced for Medical Devices) ---
+def perform_nmap_scan(target):
+    log_activity(f"Starting Nmap scan on {target} (focused on medical device services relevant to Piedmont Hospital)")
+    # Specific Nmap scripts and probes tailored for medical devices might be used here
+    command = [NMAP_PATH, "-sV", "-T4", "-p", "135,445,5900,80,443", target] # Common medical device ports
+    stdout, stderr = run_command(command)
+    if stdout:
+        log_activity(f"Nmap scan results for {target}:\n{stdout}")
+        # Enhanced parsing for medical device vulnerabilities
+        vulnerabilities = []
+        for line in stdout.splitlines():
+            if "open" in line and any(keyword in line.lower() for keyword in ["dicom", "modbus", "hl7", "uncommon", "vulnerable"]):
+                vulnerabilities.append(line.strip())
+        if vulnerabilities:
+            vulnerability_queue.put((datetime.now(), target, "Nmap", vulnerabilities))
+    else:
+        log_activity(f"Nmap scan failed for {target}:\n{stderr}", logging.ERROR)
+
+def perform_owasp_zap_scan(target):
+    log_activity(f"Starting OWASP ZAP scan on {target} (if web interface exists for Piedmont Hospital devices)")
+    parsed_url = urlparse(target)
+    if not parsed_url.scheme:
+        target = f"http://{target}"
+    if not os.path.exists(OWASP_ZAP_PATH):
+        log_activity(f"OWASP ZAP not found at {OWASP_ZAP_PATH}", logging.ERROR)
+        return
+    command = [OWASP_ZAP_PATH, "-cmd", "-quickurl", target, "-quickprogress", "-reporttype", "xml", "-reportfile", f"zap_report_{target.replace('://', '_').replace('/', '_')}.xml"]
+    stdout, stderr = run_command(command)
+    if stdout:
+        log_activity(f"OWASP ZAP scan initiated for {target}. Check report file for details.")
+        # Further parsing of the XML report can be done for specific vulnerabilities
+    else:
+        log_activity(f"OWASP ZAP scan failed for {target}:\n{stderr}", logging.ERROR)
+
+# --- AI-Powered Anomaly Detection (Conceptual for Medical Device Behavior at Piedmont Hospital) ---
+# Requires training a model on normal medical device network traffic and behavior
+def analyze_network_anomaly(traffic_data):
+    # Feature extraction from network traffic (e.g., packet size, frequency, protocols, source/destination)
+    # Load pre-trained AI model
+    # model = load_model(ANOMALY_DETECTION_MODEL)
+    # anomaly_score = model.predict(extracted_features)
+    if random.random() > 0.9: # Simulate anomaly detection
+        return random.uniform(0.7, 0.95)
+    return 0.2
+
+def monitor_network_traffic(target_ip):
+    try:
+        raw_socket = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(3))
+        log_activity(f"Starting network traffic monitoring for {target_ip} (Piedmont Hospital context)")
+        while True:
+            raw_packet, addr = raw_socket.recvfrom(65535)
+            network_traffic_history.append(raw_packet)
+            if len(network_traffic_history) > 100:
+                network_traffic_history.pop(0)
+
+            # Basic anomaly detection based on traffic patterns
+            if len(network_traffic_history) > 10:
+                # Simple example: Check for sudden increase in packet rate
+                current_rate = len(network_traffic_history) / 10
+                # Compare with a baseline or moving average
+                if current_rate > 100 and device_status["potential_compromise"] is False:
+                    log_activity(f"[POTENTIAL ANOMALY] High network traffic detected from {target_ip}", logging.WARNING)
+                    device_status["potential_compromise"] = True
+
+            # Conceptual AI-based anomaly detection
+            anomaly_score = analyze_network_anomaly(raw_packet)
+            if anomaly_score > VULNERABILITY_THRESHOLD and device_status["potential_compromise"] is False:
+                log_activity(f"[AI-POTENTIAL ANOMALY] Network behavior anomaly detected for {target_ip} (score: {anomaly_score})", logging.WARNING)
+                device_status["potential_compromise"] = True
+
+            time.sleep(0.1) # Adjust monitoring frequency
+
+    except socket.error as e:
+        log_activity(f"Error monitoring network traffic: {e}", logging.ERROR)
+    except KeyboardInterrupt:
+        log_activity(f"Network traffic monitoring stopped for {target_ip}")
+
+# --- Vulnerability Reporting Thread (Enhanced for Piedmont Hospital Medical Device Context) ---
+def vulnerability_reporter():
+    while True:
+        try:
+            timestamp, target, tool, findings = vulnerability_queue.get(timeout=5)
+            log_activity(f"[POTENTIAL MEDICAL DEVICE VULNERABILITY DETECTED at {timestamp}] Target: {target}, Tool: {tool} (Piedmont Hospital)", logging.WARNING)
+            for finding in findings:
+                log_activity(f"  - {finding}", logging.WARNING)
+
+            # Conceptual AI-based severity assessment (can be specialized for medical device impact in a hospital)
+            severity_score = random.uniform(0.5, 0.9) # Placeholder
+            log_activity(f"  AI-Assessed Severity Score (Piedmont Hospital Medical Device Context): {severity_score:.2f}", logging.WARNING)
+
+            if severity_score > VULNERABILITY_THRESHOLD:
+                log_activity(f"  [HIGH PRIORITY] Potential high-severity vulnerabilities found on medical device {target} at Piedmont Hospital.", logging.CRITICAL)
+                # Consider automated alerting to security teams
+        except Queue.Empty:
+            pass
+        except Exception as e:
+            log_activity(f"Error in vulnerability reporter thread: {e}", logging.ERROR)
+            time.sleep(5)
+
+# --- Central Monitoring and Response Module for Piedmont Hospital ---
+def monitor_device_status(target_ip):
+    while True:
+        current_time = datetime.now()
+        if device_status["last_seen"] and (current_time - device_status["last_seen"]).total_seconds() > 60:
+            log_activity(f"[DEVICE OFFLINE] No communication from {target_ip} for over 60 seconds (Piedmont Hospital).", logging.WARNING)
+            device_status["potential_compromise"] = True # Assume potential issue
+
+        if device_status["potential_compromise"]:
+            log_activity(f"[POTENTIAL COMPROMISE] Device {target_ip} flagged for potential compromise at Piedmont Hospital. Initiating further investigation.", logging.CRITICAL)
+            # Trigger automated response actions (e.g., isolate device, notify security)
+            device_status["potential_compromise"] = False # Reset after triggering response (for demonstration)
+
+        time.sleep(10)
+
+def simulate_secure_data_transfer(target_ip, port, data, encryption_key):
+    if establish_secure_channel(target_ip, port):
+        encrypted_data = encrypt_data(data, encryption_key)
+        log_activity(f"Simulated secure transfer of encrypted data to {target_ip}:{port} (Piedmont Hospital).")
+        # In a real system, you would send the encrypted_data over the secure channel
+        return True
+    return False
+
+# --- Main Execution for Piedmont Hospital ---
+if __name__ == "__main__":
+    log_activity("--- Piedmont Hospital Medical Device Security Enhancement Project ---")
+
+    # Generate or load secure keys
+    auth_key = load_secure_key(AUTHENTICATION_KEY_FILE)
+    if not auth_key:
+        auth_key = generate_secure_key(AUTHENTICATION_KEY_FILE)
+
+    encryption_key = load_secure_key(ENCRYPTION_KEY_FILE)
+    if not encryption_key:
+        encryption_key = generate_secure_key(ENCRYPTION_KEY_FILE)
+
+    # Simulate device authentication
+    if authenticate_device(TARGET_DEVICE_IP, auth_key):
+        device_status["last_seen"] = datetime.now()
+        log_activity(f"Successfully authenticated with medical device at Piedmont Hospital ({TARGET_DEVICE_IP})")
+
+        # Start vulnerability reporter thread
+        reporter_thread = threading.Thread(target=vulnerability_reporter)
+        reporter_thread.daemon = True
+        reporter_thread.start()
+
+        # Start network traffic monitoring thread
+        traffic_monitor_thread = threading.Thread(target=monitor_network_traffic, args=(TARGET_DEVICE_IP,))
+        traffic_monitor_thread.daemon = True
+        traffic_monitor_thread.start()
+
+        # Start device status monitoring thread
+        status_monitor_thread = threading.Thread(target=monitor_device_status, args=(TARGET_DEVICE_IP,))
+        status_monitor_thread.daemon = True
+        status_monitor_thread.start()
+
+        try:
+            while True:
+                print("\nChoose an action for Piedmont Hospital Medical Device Security:")
+                print(f"1. Perform Nmap Scan on {TARGET_DEVICE_IP}")
+                print(f"2. Perform OWASP ZAP Scan on {TARGET_DEVICE_IP} (if web interface exists)")
+                print(f"3. Simulate Secure Data Transfer to {TARGET_DEVICE_IP}:{SECURE_COMMUNICATION_PORT}")
+                print("4. Exit")
+
+                choice = input("Enter your choice: ")
+
+                if choice == '1':
+                    threading.Thread(target=perform_nmap_scan, args=(TARGET_DEVICE_IP,)).start()
+                elif choice == '2':
+                    threading.Thread(target=perform_owasp_zap_scan, args=(TARGET_DEVICE_IP,)).start()
+                elif choice == '3':
+                    data_to_send = "Patient vital signs data - confidential (Piedmont Hospital)"
+                    simulate_secure_data_transfer(TARGET_DEVICE_IP, SECURE_COMMUNICATION_PORT, data_to_send, encryption_key)
+                elif choice == '4':
+                    log_activity("Exiting Piedmont Hospital Medical Device Security Project.")
+                    break
+                else:
+                    print("Invalid choice.")
+
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            log_activity("Program interrupted by user.")
+        except Exception as e:
+            log_activity(f"An unexpected error occurred in the main loop: {e}", logging.ERROR)
+    else:
+        log_activity(f"Authentication with device at Piedmont Hospital ({TARGET_DEVICE_IP}) failed. Security checks not initiated.", logging.CRITICAL)
