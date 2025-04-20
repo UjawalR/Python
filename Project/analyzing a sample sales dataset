@@ -1,0 +1,193 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# --- 1. Data Loading ---
+def load_data(file_path):
+    """Loads data from a CSV file into a pandas DataFrame."""
+    try:
+        df = pd.read_csv(file_path)
+        print(f"Data loaded successfully from: {file_path}")
+        return df
+    except FileNotFoundError:
+        print(f"Error: File not found at {file_path}")
+        return None
+
+# --- 2. Data Cleaning and Preprocessing ---
+def clean_data(df):
+    """Cleans the sales data by handling missing values and data types."""
+    if df is None:
+        return None
+
+    print("\n--- Initial Data Info ---")
+    df.info()
+    print("\n--- Initial Missing Values ---")
+    print(df.isnull().sum())
+
+    # Handle missing values (example: fill numerical with mean, categorical with mode)
+    for col in df.columns:
+        if df[col].isnull().any():
+            if pd.api.types.is_numeric_dtype(df[col]):
+                df[col].fillna(df[col].mean(), inplace=True)
+                print(f"Filled missing values in '{col}' with the mean.")
+            else:
+                df[col].fillna(df[col].mode()[0], inplace=True)
+                print(f"Filled missing values in '{col}' with the mode.")
+
+    # Convert 'Order Date' to datetime objects
+    if 'Order Date' in df.columns:
+        df['Order Date'] = pd.to_datetime(df['Order Date'])
+        print("\n'Order Date' converted to datetime.")
+
+        # Extract useful time-based features
+        df['Order Month'] = df['Order Date'].dt.month
+        df['Order Year'] = df['Order Date'].dt.year
+        df['Order Day of Week'] = df['Order Date'].dt.day_name()
+
+    # Convert 'Sales' and 'Quantity' to numeric if they aren't already
+    for col in ['Sales', 'Quantity']:
+        if col in df.columns and not pd.api.types.is_numeric_dtype(df[col]):
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            print(f"'{col}' converted to numeric (invalid values set to NaN).")
+            # Re-handle potential NaNs after conversion
+            df[col].fillna(df[col].mean(), inplace=True)
+
+    print("\n--- Data Cleaning Complete ---")
+    print("\n--- Data Info After Cleaning ---")
+    df.info()
+    print("\n--- Missing Values After Cleaning ---")
+    print(df.isnull().sum())
+
+    return df
+
+# --- 3. Exploratory Data Analysis (EDA) ---
+def explore_data(df):
+    """Performs exploratory data analysis and generates basic visualizations."""
+    if df is None:
+        return
+
+    print("\n--- Basic Statistics ---")
+    print(df.describe(include='all'))
+
+    # --- Univariate Analysis ---
+    print("\n--- Univariate Analysis ---")
+    if 'Sales' in df.columns:
+        plt.figure(figsize=(8, 6))
+        sns.histplot(df['Sales'], kde=True)
+        plt.title('Distribution of Sales')
+        plt.xlabel('Sales Value')
+        plt.ylabel('Frequency')
+        plt.show()
+
+    if 'Quantity' in df.columns:
+        plt.figure(figsize=(8, 6))
+        sns.countplot(df['Quantity'])
+        plt.title('Distribution of Quantity')
+        plt.xlabel('Quantity')
+        plt.ylabel('Number of Orders')
+        plt.show()
+
+    if 'Category' in df.columns:
+        plt.figure(figsize=(10, 6))
+        sns.countplot(data=df, y='Category', order=df['Category'].value_counts().index)
+        plt.title('Distribution of Product Categories')
+        plt.xlabel('Number of Orders')
+        plt.ylabel('Category')
+        plt.show()
+
+    # --- Bivariate Analysis ---
+    print("\n--- Bivariate Analysis ---")
+    if 'Category' in df.columns and 'Sales' in df.columns:
+        plt.figure(figsize=(10, 6))
+        sns.boxplot(data=df, x='Category', y='Sales')
+        plt.title('Sales by Product Category')
+        plt.xlabel('Category')
+        plt.ylabel('Sales Value')
+        plt.show()
+
+    if 'Order Month' in df.columns and 'Sales' in df.columns:
+        monthly_sales = df.groupby('Order Month')['Sales'].sum()
+        plt.figure(figsize=(10, 6))
+        monthly_sales.plot(kind='line', marker='o')
+        plt.title('Monthly Sales Trend')
+        plt.xlabel('Month')
+        plt.ylabel('Total Sales')
+        plt.xticks(range(1, 13))
+        plt.grid(True)
+        plt.show()
+
+    if 'Ship Mode' in df.columns and 'Sales' in df.columns:
+        plt.figure(figsize=(10, 6))
+        sns.barplot(data=df, x='Ship Mode', y='Sales')
+        plt.title('Average Sales by Ship Mode')
+        plt.xlabel('Ship Mode')
+        plt.ylabel('Average Sales Value')
+        plt.show()
+
+# --- 4. Insights and Analysis ---
+def analyze_sales_performance(df):
+    """Analyzes sales performance based on different factors."""
+    if df is None:
+        return
+
+    print("\n--- Sales Performance Analysis ---")
+
+    # Total Sales
+    if 'Sales' in df.columns:
+        total_sales = df['Sales'].sum()
+        print(f"Total Revenue: ${total_sales:.2f}")
+
+    # Top Selling Category
+    if 'Category' in df.columns and 'Sales' in df.columns:
+        category_sales = df.groupby('Category')['Sales'].sum().sort_values(ascending=False)
+        top_category = category_sales.index[0]
+        top_sales = category_sales.iloc[0]
+        print(f"\nTop Selling Category: {top_category} (Total Sales: ${top_sales:.2f})")
+
+    # Monthly Sales Trend (revisited)
+    if 'Order Month' in df.columns and 'Sales' in df.columns:
+        monthly_sales = df.groupby('Order Month')['Sales'].sum()
+        highest_month = monthly_sales.idxmax()
+        highest_sales = monthly_sales.max()
+        lowest_month = monthly_sales.idxmin()
+        lowest_sales = monthly_sales.min()
+        print(f"\nMonth with Highest Sales: {highest_month} (Total Sales: ${highest_sales:.2f})")
+        print(f"Month with Lowest Sales: {lowest_month} (Total Sales: ${lowest_sales:.2f})")
+
+    # Sales by Ship Mode
+    if 'Ship Mode' in df.columns and 'Sales' in df.columns:
+        sales_by_ship_mode = df.groupby('Ship Mode')['Sales'].sum().sort_values(ascending=False)
+        print("\nTotal Sales by Ship Mode:")
+        print(sales_by_ship_mode)
+
+# --- 5. Main Execution ---
+if __name__ == "__main__":
+    file_path = 'sample_sales_data.csv'  # Replace with the actual path to your data
+
+    # Create a sample CSV file if it doesn't exist for demonstration
+    import os
+    if not os.path.exists(file_path):
+        sample_data = {
+            'Order ID': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            'Order Date': ['2023-01-01', '2023-01-15', '2023-02-10', '2023-02-20', '2023-03-05',
+                           '2023-03-18', '2023-01-25', '2023-02-01', '2023-03-22', '2023-01-10'],
+            'Ship Mode': ['Standard Class', 'Second Class', 'Standard Class', 'Same Day', 'Standard Class',
+                          'Second Class', 'Standard Class', 'First Class', 'Standard Class', 'Standard Class'],
+            'Customer ID': ['Cust-1', 'Cust-2', 'Cust-1', 'Cust-3', 'Cust-2', 'Cust-4', 'Cust-1', 'Cust-5', 'Cust-3', 'Cust-2'],
+            'Category': ['Furniture', 'Office Supplies', 'Furniture', 'Technology', 'Office Supplies',
+                         'Furniture', 'Office Supplies', 'Technology', 'Technology', 'Office Supplies'],
+            'Sales': [200.50, 50.25, 150.75, 500.00, 75.90, 220.00, 60.10, 400.20, 300.80, 40.50],
+            'Quantity': [2, 5, 1, 3, 10, 2, 4, 1, 2, 6]
+        }
+        sample_df = pd.DataFrame(sample_data)
+        sample_df.to_csv(file_path, index=False)
+        print(f"\nSample CSV file '{file_path}' created for demonstration.")
+
+    sales_df = load_data(file_path)
+
+    if sales_df is not None:
+        cleaned_df = clean_data(sales_df.copy()) # Use a copy to avoid modifying the original loaded data
+        if cleaned_df is not None:
+            explore_data(cleaned_df)
+            analyze_sales_performance(cleaned_df)
